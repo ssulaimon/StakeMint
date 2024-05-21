@@ -9,13 +9,14 @@ contract StakeMint {
     address owner;
     ERC20TokenInterface daoToken;
     uint256 public annualRate = 40000;
-    mapping(address => mapping(address => uint256)) amountDeposited;
+    mapping(address depositor => mapping(address assetContractAddress => uint256 assetValue)) amountDeposited;
     mapping(address => mapping(address => uint)) timeDeposited;
     mapping(address => uint256) _assetTVL;
     event RewardClaimed(address indexed claimerAddress, uint256 indexed amount);
     event Deposited(address indexed depositor, uint256 indexed amount);
     event Withdraw(address indexed user, uint256 indexed amount);
 
+    // Transaction receipt for the frontend to get user actions
     struct TransactionReciept {
         string assetName;
         uint256 amount;
@@ -27,8 +28,10 @@ contract StakeMint {
         string name;
     }
 
+    //list of allowed assets
     AllowedAssets[] _allowedAssets;
-    mapping(address => TransactionReciept[]) _transactionReciept;
+
+    mapping(address userAddress => TransactionReciept[]) _transactionReciept;
 
     constructor(address _daoToken) {
         daoToken = ERC20TokenInterface(_daoToken);
@@ -49,7 +52,7 @@ contract StakeMint {
     }
 
     /**
-    view assets allowed for deposit in the contract
+    view assets allowed for deposit in the contract. And also knowning the asset index
      */
     function allowedAssets() public view returns (AllowedAssets[] memory) {
         return _allowedAssets;
@@ -70,6 +73,8 @@ contract StakeMint {
         });
         _allowedAssets.push(asset);
     }
+
+    //Knowing the decimal of a particular asset for easy calculation to Wei or from Wei for the frontend
 
     function decimal(string memory _assetName) internal pure returns (uint16) {
         bytes memory usdt = bytes("USDT");
