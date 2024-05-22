@@ -4,8 +4,9 @@ pragma solidity >=0.8.0 <0.9.0;
 //0x9323C0F4eB8059648eE3f980547C79bEc9A8A46B
 
 import {ERC20TokenInterface} from "./ITokenInterface.sol";
+import {Errors} from "./Errors.sol";
 
-contract StakeMint {
+contract StakeMint is Errors {
     address owner;
     ERC20TokenInterface daoToken;
     uint256 public annualRate = 40000;
@@ -65,8 +66,7 @@ contract StakeMint {
     function addAssetAllowed(
         string memory _name,
         address _contractAddress
-    ) public {
-        require(msg.sender == owner, "Only owner can add asset");
+    ) public onlyOwner(msg.sender, owner) {
         AllowedAssets memory asset = AllowedAssets({
             contractAddress: _contractAddress,
             name: _name
@@ -93,7 +93,14 @@ contract StakeMint {
     /**
          amount of an asset locked up in the contract
         */
-    function assetTVL(uint16 index) public view returns (uint256) {
+    function assetTVL(
+        uint16 index
+    )
+        public
+        view
+        outOfIndex(index, _allowedAssets.length - 1)
+        returns (uint256)
+    {
         AllowedAssets memory asset = _allowedAssets[index];
         uint256 balance = _assetTVL[asset.contractAddress];
         return balance;
@@ -103,14 +110,21 @@ contract StakeMint {
     Deposit an asset to the contract
      */
 
-    function depositAssets(uint256 _amount, uint16 _assetIndex) public {
+    function depositAssets(
+        uint256 _amount,
+        uint16 _assetIndex
+    )
+        public
+        amountChecker(_amount)
+        outOfIndex(_assetIndex, _allowedAssets.length - 1)
+    {
         AllowedAssets memory asset = _allowedAssets[_assetIndex];
         uint16 assetDecimal = decimal(asset.name);
         ERC20TokenInterface token = ERC20TokenInterface(asset.contractAddress);
         uint256 allowance = token.allowance(msg.sender, address(this));
-        require(allowance >= _amount, "Amount approve to be spent is lower");
+        allowanceChecker(allowance, _amount);
         bool transfer = token.transferFrom(msg.sender, address(this), _amount);
-        require(transfer, "Token not sent!!!");
+        isTransfered(transfer);
         amountDeposited[msg.sender][asset.contractAddress] += _amount;
         timeDeposited[msg.sender][asset.contractAddress] = block.timestamp;
         _assetTVL[asset.contractAddress] += _amount;
@@ -132,10 +146,10 @@ contract StakeMint {
         address _userAddress
     ) internal view returns (uint256) {
         uint256 amount = amountDeposited[_userAddress][_asset];
-        require(amount > 0, "You need to make deposit");
+        checkBalance(amount);
         uint256 daysUsed = (block.timestamp -
             timeDeposited[_userAddress][_asset]) / 1 days;
-        require(daysUsed > 0, "No reward yet");
+        timeChecker(daysUsed);
 
         uint256 dailyInterest = annualRate / 365;
         uint256 interest = dailyInterest * daysUsed;
@@ -150,7 +164,12 @@ contract StakeMint {
     function checkReward(
         uint16 _index,
         address _userAddress
-    ) public view returns (uint256) {
+    )
+        public
+        view
+        outOfIndex(_index, _allowedAssets.length - 1)
+        returns (uint256)
+    {
         AllowedAssets memory asset = _allowedAssets[_index];
         uint256 daysUsed = (block.timestamp -
             timeDeposited[_userAddress][asset.contractAddress]) / 1 days;
@@ -171,10 +190,13 @@ contract StakeMint {
     /**
     Claim earned tokens
      */
-    function claimReward(uint16 _index) public {
+    function claimReward(
+        uint16 _index
+    ) public outOfIndex(_index, _allowedAssets.length - 1) {
         AllowedAssets memory asset = _allowedAssets[_index];
         uint16 assetDecimal = decimal(asset.name);
         uint256 expectedReward = checkReward(_index, msg.sender);
+        checkBalance(expectedReward);
         daoToken.transfer(msg.sender, expectedReward);
         timeDeposited[msg.sender][asset.contractAddress] = block.timestamp;
         TransactionReciept memory reciept = TransactionReciept({
@@ -196,17 +218,17 @@ contract StakeMint {
         uint16 _index,
         uint256 _amount,
         address _ownerAddress
-    ) public returns (bool) {
+    ) public outOfIndex(_index, _allowedAssets.length - 1) returns (bool) {
         AllowedAssets memory asset = _allowedAssets[_index];
         uint16 assetDecimal = decimal(asset.name);
         uint256 balance = amountDeposited[_ownerAddress][asset.contractAddress];
-        require(balance > 0, "You don't have any token deposited");
-        require(balance >= _amount, "You don't have enough balance");
+        checkBalance(balance);
+        withdrawalError(balance, _amount);
         uint256 expectedReward = checkReward(_index, _ownerAddress);
-        require(expectedReward == 0, "Please claim Dao token First!!");
+        isRewardClaimed(expectedReward);
         ERC20TokenInterface token = ERC20TokenInterface(asset.contractAddress);
         bool transfer = token.transfer(_ownerAddress, _amount);
-        require(transfer, "Token not transfered");
+        isTransfered(transfer);
         _assetTVL[asset.contractAddress] -= _amount;
         amountDeposited[_ownerAddress][asset.contractAddress] =
             amountDeposited[_ownerAddress][asset.contractAddress] -
@@ -224,10 +246,19 @@ contract StakeMint {
     }
 
     function userBalanceInContract(
-        uint16 index,
+        uint256 _index,
         address _owner
-    ) public view returns (uint256) {
-        AllowedAssets memory asset = _allowedAssets[index];
+    )
+        public
+        view
+        outOfIndex(_index, _allowedAssets.length - 1)
+        returns (uint256)
+    {
+        AllowedAssets memory asset = _allowedAssets[_index];
         return amountDeposited[_owner][asset.contractAddress];
+    }
+
+    function changeRate(uint256 newRate) public onlyOwner(msg.sender, owner) {
+        annualRate = newRate;
     }
 }
