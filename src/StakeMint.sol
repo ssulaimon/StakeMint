@@ -3,11 +3,11 @@ pragma solidity >=0.8.0 <0.9.0;
 
 //0x9323C0F4eB8059648eE3f980547C79bEc9A8A46B
 
-import {ERC20TokenInterface} from "./ITokenInterface.sol";
+import {ERC20TokenInterface} from "./interfaces/ITokenInterface.sol";
 import {Errors} from "./Errors.sol";
 
 contract StakeMint is Errors {
-    address owner;
+    address private immutable owner;
     ERC20TokenInterface daoToken;
     uint256 public annualRate = 40000;
     mapping(address depositor => mapping(address assetContractAddress => uint256 assetValue)) amountDeposited;
@@ -260,5 +260,9 @@ contract StakeMint is Errors {
 
     function changeRate(uint256 newRate) public onlyOwner(msg.sender, owner) {
         annualRate = newRate;
+    }
+
+    function contractOwner() public view returns (address) {
+        return owner;
     }
 }

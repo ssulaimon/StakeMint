@@ -7,16 +7,13 @@ interface ERC20TokenInterface {
         address spender
     ) external view returns (uint256);
 
+    function tokenOwner() external view returns (address);
+
     function approve(address spender, uint256 value) external returns (bool);
 
     function balanceOf(address owner) external view returns (uint256);
 
     function decimals() external view returns (uint8);
-
-    function increaseApproval(
-        address spender,
-        uint256 subtractedValue
-    ) external;
 
     function name() external view returns (string memory);
 
@@ -25,12 +22,6 @@ interface ERC20TokenInterface {
     function totalSupply() external view returns (uint256);
 
     function transfer(address to, uint256 value) external returns (bool);
-
-    function transferAndCall(
-        address to,
-        uint256 value,
-        bytes calldata data
-    ) external returns (bool);
 
     function transferFrom(
         address from,
