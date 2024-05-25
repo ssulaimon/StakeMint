@@ -25,6 +25,7 @@ contract DeployStakeMint is Script {
         vm.prank(senderAddress);
 
         StakeMint stakeMint = new StakeMint(daoTokenAddress);
+
         return (senderAddress, aaveTokenAddress, stakeMint, daoTokenAddress);
     }
 }

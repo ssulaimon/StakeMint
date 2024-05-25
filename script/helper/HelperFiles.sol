@@ -53,7 +53,7 @@ contract HelperFiles is Script {
         address simulatedSender = makeAddr("Deployer");
 
         console.log(simulatedSender);
-        vm.prank(simulatedSender);
+        vm.startPrank(simulatedSender);
         DeployMockDaoToken deployMockToken = new DeployMockDaoToken(
             "StakeMintToken",
             "STM",
@@ -68,6 +68,8 @@ contract HelperFiles is Script {
             _TOKENSUPPLY,
             simulatedSender
         );
+
+        vm.stopPrank();
 
         Configuration memory config = Configuration({
             daoTokenAddress: address(deployMockToken),

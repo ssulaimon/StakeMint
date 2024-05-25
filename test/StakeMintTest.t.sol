@@ -18,11 +18,13 @@ contract StakeMintTest is Test {
     ERC20TokenInterface daoToken;
 
     DeployStakeMint deployStakeMint;
+    address stakeMintContractAddress;
     function setUp() external {
         deployStakeMint = new DeployStakeMint();
         (sender, aave, stakeMint, dao) = deployStakeMint.run();
         aaveToken = ERC20TokenInterface(aave);
         daoToken = ERC20TokenInterface(dao);
+        stakeMintContractAddress = address(stakeMint);
     }
 
     /*
@@ -87,5 +89,99 @@ contract StakeMintTest is Test {
         stakeMint.addAssetAllowed("AAVE", dao);
         uint256 assets = stakeMint.allowedAssets().length;
         assertEq(assets, 1);
+    }
+    function testAllowance() public {
+        vm.startPrank(sender);
+        uint256 value = 10e18;
+        aaveToken.approve(stakeMintContractAddress, value);
+        uint256 allowance = aaveToken.allowance(
+            sender,
+            stakeMintContractAddress
+        );
+        assertEq(allowance, value);
+        vm.stopPrank();
+    }
+
+    function testDeposit() public {
+        vm.startPrank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        uint256 value = 10e18;
+        aaveToken.approve(stakeMintContractAddress, value);
+        stakeMint.depositAssets(value, uint16(0));
+        uint256 balance = stakeMint.assetTVL(uint16(0));
+        assertEq(balance, value);
+        vm.stopPrank();
+    }
+
+    function testUserBalance() public {
+        vm.startPrank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        uint256 value = 10e18;
+        aaveToken.approve(stakeMintContractAddress, value);
+        stakeMint.depositAssets(value, uint16(0));
+        uint256 balance = stakeMint.userBalanceInContract(0, sender);
+        assertEq(balance, value);
+        vm.stopPrank();
+    }
+
+    function testWithdraw() public {
+        vm.startPrank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        uint256 value = 10e18;
+        aaveToken.approve(stakeMintContractAddress, value);
+        stakeMint.depositAssets(value, uint16(0));
+        stakeMint.withdrawAsset(uint16(0), value, sender);
+        uint256 balance = stakeMint.userBalanceInContract(0, sender);
+        assertEq(balance, 0);
+        vm.stopPrank();
+    }
+    function testUnableToWithdraw() public {
+        uint256 value = 10e18;
+        vm.prank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        vm.prank(sender);
+        aaveToken.approve(stakeMintContractAddress, value);
+        vm.prank(sender);
+        stakeMint.depositAssets(value, uint16(0));
+        vm.expectRevert();
+        vm.prank(INTERACTING_ADDRESS);
+        stakeMint.withdrawAsset(uint16(0), value, INTERACTING_ADDRESS);
+    }
+    function testOutOfIndex() public {
+        vm.expectRevert();
+        stakeMint.assetTVL(uint16(3));
+    }
+
+    function testDaoTokenBalance() public {
+        uint256 value = 200e18;
+        vm.startPrank(sender);
+        daoToken.transfer(stakeMintContractAddress, value);
+        uint256 contractTokenBalance = stakeMint.daoTokenBalance();
+        assertEq(contractTokenBalance, value);
+        vm.stopPrank();
+    }
+    function testUserTransactions() public {
+        uint256 value = 300e18;
+        vm.startPrank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        aaveToken.approve(stakeMintContractAddress, value);
+        stakeMint.depositAssets(100e18, uint16(0));
+        stakeMint.depositAssets(100e18, uint16(0));
+        stakeMint.depositAssets(100e18, uint16(0));
+        uint256 transaction = stakeMint.transactionReciept(sender).length;
+        assertEq(transaction, 3);
+        vm.stopPrank();
+    }
+    function testOverWithdraw() public {
+        uint256 value = 300e18;
+        vm.startPrank(sender);
+        stakeMint.addAssetAllowed("AAVE", aave);
+        aaveToken.approve(stakeMintContractAddress, value);
+
+        stakeMint.depositAssets(value, uint16(0));
+        vm.expectRevert();
+        stakeMint.withdrawAsset(uint16(0), 400e18, sender);
+
+        vm.stopPrank();
     }
 }
