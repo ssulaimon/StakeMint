@@ -7,8 +7,6 @@ interface ERC20TokenInterface {
         address spender
     ) external view returns (uint256);
 
-    function tokenOwner() external view returns (address);
-
     function approve(address spender, uint256 value) external returns (bool);
 
     function balanceOf(address owner) external view returns (uint256);

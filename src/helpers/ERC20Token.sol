@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
-
-import {ERC20TokenInterface} from "../../src/interfaces/ITokenInterface.sol";
+pragma solidity ^0.8.0;
+import {ERC20TokenInterface} from "../../src/interfaces/IERC20TokenInterface.sol";
 
 contract ERC20 is ERC20TokenInterface {
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -17,7 +16,6 @@ contract ERC20 is ERC20TokenInterface {
     string public name;
     string public symbol;
     uint8 public decimals;
-    address public tokenOwner;
 
     constructor(string memory _name, string memory _symbol, uint8 _decimals) {
         name = _name;
@@ -56,7 +54,6 @@ contract ERC20 is ERC20TokenInterface {
     function _mint(address to, uint256 amount) internal {
         balanceOf[to] += amount;
         totalSupply += amount;
-        tokenOwner = to;
         emit Transfer(address(0), to, amount);
     }
 

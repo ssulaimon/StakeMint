@@ -1,268 +1,92 @@
-//SPDX-License-Identifier:MIT
+//SPDX-License-Identfier:MIT
 pragma solidity >=0.8.0 <0.9.0;
+import {IStakeMint} from "../src/interfaces/IStakeMint.sol";
+import {Owner} from "../src/helpers/Owner.sol";
+import {Errors} from "../src/helpers/Errors.sol";
+import {PriceConverter} from "../src/helpers/PriceConverter.sol";
+import {ERC20TokenInterface} from "../src/interfaces/IERC20TokenInterface.sol";
 
-//0x9323C0F4eB8059648eE3f980547C79bEc9A8A46B
-
-import {ERC20TokenInterface} from "./interfaces/ITokenInterface.sol";
-import {Errors} from "./Errors.sol";
-
-contract StakeMint is Errors {
-    address private immutable owner;
-    ERC20TokenInterface daoToken;
-    uint256 public annualRate = 40000;
-    mapping(address depositor => mapping(address assetContractAddress => uint256 assetValue)) amountDeposited;
-    mapping(address => mapping(address => uint)) timeDeposited;
-    mapping(address => uint256) _assetTVL;
-    event RewardClaimed(address indexed claimerAddress, uint256 indexed amount);
-    event Deposited(address indexed depositor, uint256 indexed amount);
-    event Withdraw(address indexed user, uint256 indexed amount);
-
-    // Transaction receipt for the frontend to get user actions
-    struct TransactionReciept {
-        string assetName;
-        uint256 amount;
-        string functionCalled;
-        uint16 decimal;
-    }
-    struct AllowedAssets {
-        address contractAddress;
+contract StakeMint is IStakeMint, Owner, Errors {
+    using PriceConverter for uint256;
+    struct Assets {
         string name;
+        address assetContractAddress;
+        address priceFeedContractAddress;
     }
+    // list of all assets allowed for deposit
+    Assets[] private s_assets;
+    //The amount of the value locked in US Dollar
+    uint256 private s_tvl;
+    // tracks the quantity of the asset in the contract. Eg 24WrappedEth
+    mapping(address assetAddress => uint256 assetQuantity)
+        private s_assetLocked;
+    // dollar value of all asset user locked in contract
+    mapping(address depositorAddress => uint256 dollarValueLocked)
+        private s_userValueLocked;
 
-    //list of allowed assets
-    AllowedAssets[] _allowedAssets;
+    // Quantity amount of a particular asset locked my a user. Eg how many WrappedEth
+    mapping(address depositorAddress => mapping(address assetContractAddress => uint256 amount))
+        private s_userAssetLocked;
 
-    mapping(address userAddress => TransactionReciept[]) _transactionReciept;
-
-    constructor(address _daoToken) {
-        daoToken = ERC20TokenInterface(_daoToken);
-        owner = msg.sender;
-    }
-
-    function transactionReciept(
-        address _user
-    ) public view returns (TransactionReciept[] memory) {
-        return _transactionReciept[_user];
-    }
-
-    /**
-    Get balance of dao tokens the contract holds for rewards
-     */
-    function daoTokenBalance() public view returns (uint256) {
-        return daoToken.balanceOf(address(this));
-    }
-
-    /**
-    view assets allowed for deposit in the contract. And also knowning the asset index
-     */
-    function allowedAssets() public view returns (AllowedAssets[] memory) {
-        return _allowedAssets;
-    }
-
-    /**
-    add an asset for earning purposes 
-     */
-
-    function addAssetAllowed(
-        string memory _name,
-        address _contractAddress
-    ) public onlyOwner(msg.sender, owner) {
-        AllowedAssets memory asset = AllowedAssets({
-            contractAddress: _contractAddress,
-            name: _name
+    function addAsset(
+        string calldata _name,
+        address _assetContractAdress,
+        address _assetPriceFeed
+    ) public onlyOwner(getOwner()) returns (bool) {
+        Assets memory newAsset = Assets({
+            name: _name,
+            assetContractAddress: _assetContractAdress,
+            priceFeedContractAddress: _assetPriceFeed
         });
-        _allowedAssets.push(asset);
+        s_assets.push(newAsset);
+        return true;
     }
+    function withdraw() public returns (bool) {}
 
-    //Knowing the decimal of a particular asset for easy calculation to Wei or from Wei for the frontend
-
-    function decimal(string memory _assetName) internal pure returns (uint16) {
-        bytes memory usdt = bytes("USDT");
-        bytes memory usdc = bytes("USDC");
-        bytes memory assetName = bytes(_assetName);
-        if (
-            keccak256(usdc) == keccak256(assetName) ||
-            keccak256(usdt) == keccak256(assetName)
-        ) {
-            return 6;
-        } else {
-            return 18;
-        }
-    }
-
-    /**
-         amount of an asset locked up in the contract
-        */
-    function assetTVL(
-        uint16 index
-    )
-        public
-        view
-        outOfIndex(index, _allowedAssets.length - 1)
-        returns (uint256)
-    {
-        AllowedAssets memory asset = _allowedAssets[index];
-        uint256 balance = _assetTVL[asset.contractAddress];
-        return balance;
-    }
-
-    /**
-    Deposit an asset to the contract
-     */
-
-    function depositAssets(
-        uint256 _amount,
-        uint16 _assetIndex
-    )
-        public
-        amountChecker(_amount)
-        outOfIndex(_assetIndex, _allowedAssets.length - 1)
-    {
-        AllowedAssets memory asset = _allowedAssets[_assetIndex];
-        uint16 assetDecimal = decimal(asset.name);
-        ERC20TokenInterface token = ERC20TokenInterface(asset.contractAddress);
-        uint256 allowance = token.allowance(msg.sender, address(this));
-        allowanceChecker(allowance, _amount);
-        bool transfer = token.transferFrom(msg.sender, address(this), _amount);
-        isTransfered(transfer);
-        amountDeposited[msg.sender][asset.contractAddress] += _amount;
-        timeDeposited[msg.sender][asset.contractAddress] = block.timestamp;
-        _assetTVL[asset.contractAddress] += _amount;
-        TransactionReciept memory reciept = TransactionReciept({
-            assetName: asset.name,
-            amount: _amount,
-            functionCalled: "deposit",
-            decimal: assetDecimal
-        });
-        _transactionReciept[msg.sender].push(reciept);
-        emit Deposited(msg.sender, _amount);
-    }
-
-    /**
-        calculate the amount an address is supposed to earn(DAO token)
-        */
-    function calculateReward(
-        address _asset,
-        address _userAddress
-    ) internal view returns (uint256) {
-        uint256 amount = amountDeposited[_userAddress][_asset];
-        checkBalance(amount);
-        uint256 daysUsed = (block.timestamp -
-            timeDeposited[_userAddress][_asset]) / 1 days;
-        timeChecker(daysUsed);
-
-        uint256 dailyInterest = annualRate / 365;
-        uint256 interest = dailyInterest * daysUsed;
-        uint256 reward = (amount * interest) / 1000000;
-        return reward;
-    }
-
-    /**
-    view how much token the contract owe an address 
-     */
-
-    function checkReward(
-        uint16 _index,
-        address _userAddress
-    )
-        public
-        view
-        outOfIndex(_index, _allowedAssets.length - 1)
-        returns (uint256)
-    {
-        AllowedAssets memory asset = _allowedAssets[_index];
-        uint256 daysUsed = (block.timestamp -
-            timeDeposited[_userAddress][asset.contractAddress]) / 1 days;
-
-        if (amountDeposited[_userAddress][asset.contractAddress] == 0) {
-            return 0;
-        } else if (daysUsed <= 0) {
-            return 0;
-        } else {
-            uint256 reward = calculateReward(
-                asset.contractAddress,
-                _userAddress
-            );
-            return reward;
-        }
-    }
-
-    /**
-    Claim earned tokens
-     */
-    function claimReward(
-        uint16 _index
-    ) public outOfIndex(_index, _allowedAssets.length - 1) {
-        AllowedAssets memory asset = _allowedAssets[_index];
-        uint16 assetDecimal = decimal(asset.name);
-        uint256 expectedReward = checkReward(_index, msg.sender);
-        checkBalance(expectedReward);
-        daoToken.transfer(msg.sender, expectedReward);
-        timeDeposited[msg.sender][asset.contractAddress] = block.timestamp;
-        TransactionReciept memory reciept = TransactionReciept({
-            assetName: "STM token",
-            amount: expectedReward,
-            functionCalled: "Claim Token",
-            decimal: assetDecimal
-        });
-
-        _transactionReciept[msg.sender].push(reciept);
-        emit RewardClaimed(msg.sender, expectedReward);
-    }
-
-    /**
-    withdraw base asset 
-     */
-
-    function withdrawAsset(
-        uint16 _index,
-        uint256 _amount,
-        address _ownerAddress
-    ) public outOfIndex(_index, _allowedAssets.length - 1) returns (bool) {
-        AllowedAssets memory asset = _allowedAssets[_index];
-        uint16 assetDecimal = decimal(asset.name);
-        uint256 balance = amountDeposited[_ownerAddress][asset.contractAddress];
-        checkBalance(balance);
-        withdrawalError(balance, _amount);
-        uint256 expectedReward = checkReward(_index, _ownerAddress);
-        isRewardClaimed(expectedReward);
-        ERC20TokenInterface token = ERC20TokenInterface(asset.contractAddress);
-        bool transfer = token.transfer(_ownerAddress, _amount);
-        isTransfered(transfer);
-        _assetTVL[asset.contractAddress] -= _amount;
-        amountDeposited[_ownerAddress][asset.contractAddress] =
-            amountDeposited[_ownerAddress][asset.contractAddress] -
-            _amount;
-        timeDeposited[_ownerAddress][asset.contractAddress] = 0;
-        TransactionReciept memory reciept = TransactionReciept({
-            assetName: asset.name,
-            amount: _amount,
-            functionCalled: "Withdraw",
-            decimal: assetDecimal
-        });
-        _transactionReciept[_ownerAddress].push(reciept);
-        emit Withdraw(_ownerAddress, _amount);
+    function deposit(
+        uint256 _value,
+        address _priceFeedAddress,
+        uint256 _assetIndex
+    ) public checkIndex(_assetIndex, s_assets.length) returns (bool) {
+        Assets memory asset = s_assets[_assetIndex];
+        ERC20TokenInterface erc20Token = ERC20TokenInterface(
+            asset.assetContractAddress
+        );
+        uint256 allowance = erc20Token.allowance(msg.sender, address(this));
+        allowanceCheck(allowance, _value);
+        uint256 value = _value.valueConverter(_priceFeedAddress);
+        s_assetLocked[asset.assetContractAddress] = _value;
+        s_tvl += value;
+        s_userValueLocked[msg.sender] += value;
         return true;
     }
 
-    function userBalanceInContract(
-        uint256 _index,
-        address _owner
-    )
-        public
-        view
-        outOfIndex(_index, _allowedAssets.length - 1)
-        returns (uint256)
-    {
-        AllowedAssets memory asset = _allowedAssets[_index];
-        return amountDeposited[_owner][asset.contractAddress];
+    /** 
+ getters 
+    **/
+
+    //TVL(total value locked in US dollar)
+    function checkContractTotalValueLocked() public view returns (uint256) {
+        return s_tvl;
     }
 
-    function changeRate(uint256 newRate) public onlyOwner(msg.sender, owner) {
-        annualRate = newRate;
+    // get total number of a asset locked in the contract
+    function getContractAssetValueLocked(
+        address asset
+    ) public view returns (uint256) {
+        return s_assetLocked[asset];
     }
-
-    function contractOwner() public view returns (address) {
-        return owner;
+    //User total value Locked In dollar
+    function getUserTotalValueLocked(
+        address _user
+    ) public view returns (uint256) {
+        return s_userValueLocked[_user];
+    }
+    // get amount of an asset a user locked in contract
+    function getUserAssetValueLocked(
+        address _user,
+        address _asset
+    ) public view returns (uint256) {
+        return s_userAssetLocked[_user][_asset];
     }
 }

@@ -1,0 +1,9 @@
+1. deposit
+2. withdraw
+
+
+owner functions
+
+1. adding new assets(erc20tokens) to the contract
+    - contract details (name, asset contract address, asset priceFeed address)
+
