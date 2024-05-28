@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
+
 import {ERC20TokenInterface} from "../../src/interfaces/IERC20TokenInterface.sol";
 
 contract ERC20 is ERC20TokenInterface {
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
@@ -23,10 +20,7 @@ contract ERC20 is ERC20TokenInterface {
         decimals = _decimals;
     }
 
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool) {
+    function transfer(address recipient, uint256 amount) external returns (bool) {
         balanceOf[msg.sender] -= amount;
         balanceOf[recipient] += amount;
         emit Transfer(msg.sender, recipient, amount);
@@ -39,11 +33,7 @@ contract ERC20 is ERC20TokenInterface {
         return true;
     }
 
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool) {
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
         allowance[sender][msg.sender] -= amount;
         balanceOf[sender] -= amount;
         balanceOf[recipient] += amount;
