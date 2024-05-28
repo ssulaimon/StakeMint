@@ -18,7 +18,7 @@ contract TokensConfig is Test, Users {
     }
 
     Tokens[] tokens;
-    uint256 constant TOKENS_SUPPLY = 200_000_000e18;
+    uint256 public constant TOKENS_SUPPLY = 200_000_000e18;
     string[] tokensNames = ["WrappedEth", "USDC", "Link"];
     string[] tokensSymbol = ["WETH", "USDC", "LINK"];
     int256[] startingPrice = [int256(3900e8), int256(1e18), int256(1820200000)];
@@ -76,7 +76,11 @@ contract TokensConfig is Test, Users {
                 tokens.push(config);
             }
 
-            vm.stopBroadcast();
+            vm.stopPrank();
         }
+    }
+
+    function getTokens() public view returns (Tokens[] memory) {
+        return tokens;
     }
 }

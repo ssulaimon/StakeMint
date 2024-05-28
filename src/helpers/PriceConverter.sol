@@ -4,15 +4,22 @@ pragma solidity >=0.8.0 <0.9.0;
 import {AggregatorV3Interface} from "../../src/interfaces/IAggregatorV3Interface.sol";
 
 library PriceConverter {
-    function getCurrentAssetPrice(address priceFeedAddress) public view returns (uint256) {
-        AggregatorV3Interface aggregatorV3 = AggregatorV3Interface(priceFeedAddress);
-        (, int256 answer,,,) = aggregatorV3.latestRoundData();
-        return uint256(answer) * 10e10;
+    function getCurrentAssetPrice(
+        address priceFeedAddress
+    ) public view returns (uint256) {
+        AggregatorV3Interface aggregatorV3 = AggregatorV3Interface(
+            priceFeedAddress
+        );
+        (, int256 answer, , , ) = aggregatorV3.latestRoundData();
+        return uint256(answer);
     }
 
-    function valueConverter(uint256 _value, address _priceFeedAddress) public view returns (uint256) {
+    function valueConverter(
+        uint256 _value,
+        address _priceFeedAddress
+    ) public view returns (uint256) {
         uint256 latestPrice = getCurrentAssetPrice(_priceFeedAddress);
-        uint256 value = latestPrice * _value;
+        uint256 value = (latestPrice * _value) / 10e8;
         return value;
     }
 }

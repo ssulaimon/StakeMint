@@ -21,37 +21,43 @@ contract StakeMint is IStakeMint, Owner, Errors {
     //The amount of the value locked in US Dollar
     uint256 private s_tvl;
     // tracks the quantity of the asset in the contract. Eg 24WrappedEth
-    mapping(address assetAddress => uint256 assetQuantity) private s_assetLocked;
+    mapping(address assetAddress => uint256 assetQuantity)
+        private s_assetLocked;
     // dollar value of all asset user locked in contract
-    mapping(address depositorAddress => uint256 dollarValueLocked) private s_userValueLocked;
+    mapping(address depositorAddress => uint256 dollarValueLocked)
+        private s_userValueLocked;
 
     // Quantity amount of a particular asset locked my a user. Eg how many WrappedEth
-    mapping(address depositorAddress => mapping(address assetContractAddress => uint256 amount)) private
-        s_userAssetLocked;
+    mapping(address depositorAddress => mapping(address assetContractAddress => uint256 amount))
+        private s_userAssetLocked;
 
-    function addAsset(string calldata _name, address _assetContractAdress, address _assetPriceFeed)
-        public
-        onlyOwner(getOwner())
-        returns (bool)
-    {
-        Assets memory newAsset =
-            Assets({name: _name, assetContractAddress: _assetContractAdress, priceFeedContractAddress: _assetPriceFeed});
+    function addAsset(
+        string calldata _name,
+        address _assetContractAdress,
+        address _assetPriceFeed
+    ) public onlyOwner(getOwner()) returns (bool) {
+        Assets memory newAsset = Assets({
+            name: _name,
+            assetContractAddress: _assetContractAdress,
+            priceFeedContractAddress: _assetPriceFeed
+        });
         s_assets.push(newAsset);
         return true;
     }
 
     function withdraw() public returns (bool) {}
 
-    function deposit(uint256 _value, address _priceFeedAddress, uint256 _assetIndex)
-        public
-        checkIndex(_assetIndex, s_assets.length)
-        returns (bool)
-    {
+    function deposit(
+        uint256 _value,
+        uint256 _assetIndex
+    ) public checkIndex(_assetIndex, s_assets.length) returns (bool) {
         Assets memory asset = s_assets[_assetIndex];
-        ERC20TokenInterface erc20Token = ERC20TokenInterface(asset.assetContractAddress);
+        ERC20TokenInterface erc20Token = ERC20TokenInterface(
+            asset.assetContractAddress
+        );
         uint256 allowance = erc20Token.allowance(msg.sender, address(this));
         allowanceCheck(allowance, _value);
-        uint256 value = _value.valueConverter(_priceFeedAddress);
+        uint256 value = _value.valueConverter(asset.priceFeedContractAddress);
         s_assetLocked[asset.assetContractAddress] = _value;
         s_tvl += value;
         s_userValueLocked[msg.sender] += value;
@@ -69,17 +75,28 @@ contract StakeMint is IStakeMint, Owner, Errors {
     }
 
     // get total number of a asset locked in the contract
-    function getContractAssetValueLocked(address asset) public view returns (uint256) {
+    function getContractAssetValueLocked(
+        address asset
+    ) public view returns (uint256) {
         return s_assetLocked[asset];
     }
     //User total value Locked In dollar
 
-    function getUserTotalValueLocked(address _user) public view returns (uint256) {
+    function getUserTotalValueLocked(
+        address _user
+    ) public view returns (uint256) {
         return s_userValueLocked[_user];
     }
     // get amount of an asset a user locked in contract
 
-    function getUserAssetValueLocked(address _user, address _asset) public view returns (uint256) {
+    function getUserAssetValueLocked(
+        address _user,
+        address _asset
+    ) public view returns (uint256) {
         return s_userAssetLocked[_user][_asset];
+    }
+
+    function getAllowedAssets() public view returns (Assets[] memory) {
+        return s_assets;
     }
 }
