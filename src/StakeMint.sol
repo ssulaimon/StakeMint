@@ -21,8 +21,7 @@ contract StakeMint is IStakeMint, Owner, Errors {
     //The amount of the value locked in US Dollar
     uint256 private s_tvl;
     // tracks the quantity of the asset in the contract. Eg 24WrappedEth
-    mapping(address assetAddress => uint256 assetQuantity)
-        private s_assetLocked;
+
     // dollar value of all asset user locked in contract
     mapping(address depositorAddress => uint256 dollarValueLocked)
         private s_userValueLocked;
@@ -36,16 +35,67 @@ contract StakeMint is IStakeMint, Owner, Errors {
         address _assetContractAdress,
         address _assetPriceFeed
     ) public onlyOwner(getOwner()) returns (bool) {
+        //Creating a new asset
         Assets memory newAsset = Assets({
             name: _name,
             assetContractAddress: _assetContractAdress,
             priceFeedContractAddress: _assetPriceFeed
         });
+        // Pushing the new asset to the list
         s_assets.push(newAsset);
+        emit AssetAdded(
+            msg.sender,
+            _assetContractAdress,
+            _name,
+            _assetPriceFeed,
+            block.timestamp
+        );
         return true;
     }
 
-    function withdraw() public returns (bool) {}
+    function withdraw(
+        uint256 _amount,
+        uint256 _assetIndex
+    ) public checkIndex(_assetIndex, s_assets.length) returns (bool) {
+        //Read asset index from the list
+        Assets memory asset = s_assets[_assetIndex];
+
+        //check if user have enough balance deposited
+        userBalanceInContract(
+            s_userAssetLocked[msg.sender][asset.assetContractAddress],
+            _amount
+        );
+
+        // convert the amount to USD
+        uint256 amountInUsd = _amount.valueConverter(
+            asset.priceFeedContractAddress
+        );
+        //Subtract the dollar value from user value locked in dollar
+        s_userValueLocked[msg.sender] -= amountInUsd;
+
+        //Subtract the dollar value from contract value locked in dollar
+        s_tvl -= amountInUsd;
+
+        // Subtract the amount from the asset valued locked by user
+        s_userAssetLocked[msg.sender][asset.assetContractAddress] -= _amount;
+
+        ERC20TokenInterface token = ERC20TokenInterface(
+            asset.assetContractAddress
+        );
+
+        // Transfer the token amount requested to the sender
+        bool isSucessful = token.transfer(msg.sender, _amount);
+
+        // Check if the transfer was successful
+        transactionIsuccessful(isSucessful);
+        emit Withdraw(
+            msg.sender,
+            _amount,
+            asset.name,
+            asset.assetContractAddress
+        );
+        return true;
+    }
 
     function deposit(
         uint256 _value,
@@ -57,11 +107,32 @@ contract StakeMint is IStakeMint, Owner, Errors {
         );
         uint256 allowance = erc20Token.allowance(msg.sender, address(this));
         allowanceCheck(allowance, _value);
+        bool isTransfered = erc20Token.transferFrom(
+            msg.sender,
+            address(this),
+            _value
+        );
+        transactionIsuccessful(isTransfered);
         uint256 value = _value.valueConverter(asset.priceFeedContractAddress);
-        s_assetLocked[asset.assetContractAddress] = _value;
         s_tvl += value;
         s_userValueLocked[msg.sender] += value;
+        emit Deposited(
+            msg.sender,
+            _value,
+            asset.name,
+            asset.assetContractAddress
+        );
         return true;
+    }
+
+    function withdrawContractBalance(
+        address asset,
+        uint256 amount,
+        address receiver
+    ) public onlyOwner(getOwner()) balanceCheck(asset, address(this), amount) {
+        ERC20TokenInterface token = ERC20TokenInterface(asset);
+        bool isTransfered = token.transfer(receiver, amount);
+        transactionIsuccessful(isTransfered);
     }
 
     /**
@@ -78,7 +149,9 @@ contract StakeMint is IStakeMint, Owner, Errors {
     function getContractAssetValueLocked(
         address asset
     ) public view returns (uint256) {
-        return s_assetLocked[asset];
+        ERC20TokenInterface token = ERC20TokenInterface(asset);
+        uint256 balance = token.balanceOf(address(this));
+        return balance;
     }
     //User total value Locked In dollar
 

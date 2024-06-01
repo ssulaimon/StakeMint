@@ -96,6 +96,7 @@ contract StakeMintUintTesting is Test, Users {
     function testTVL() public {
         //Arrange
         addMultipleAsset(1);
+        vm.startPrank(i_owner);
         address tokenContract = tokensConfig.getTokens()[0].contractAddress;
         ERC20TokenInterface erc20TokenContract = ERC20TokenInterface(
             tokenContract
@@ -106,5 +107,29 @@ contract StakeMintUintTesting is Test, Users {
         uint256 tvl = stakeMint.checkContractTotalValueLocked();
         uint256 expectedValue = (3900e8 * VALUE) / 10e8;
         assertEq(expectedValue, tvl);
+        vm.stopPrank();
+    }
+    function testInsufficientAllowance() public {
+        addMultipleAsset(1);
+        vm.prank(i_owner);
+        vm.expectRevert();
+        stakeMint.deposit(10e18, 0);
+    }
+
+    function testAssetLocked() public {
+        //Arrange
+        addMultipleAsset(1);
+        address tokenContract = tokensConfig.getTokens()[0].contractAddress;
+        ERC20TokenInterface token = ERC20TokenInterface(tokenContract);
+        vm.prank(i_owner);
+        token.transfer(i_user, 500e18);
+        //Act
+        vm.prank(i_user);
+        token.approve(address(stakeMint), 500e18);
+        vm.prank(i_user);
+        stakeMint.deposit(500e18, 0);
+        //Assert
+        uint256 value = stakeMint.getContractAssetValueLocked(tokenContract);
+        assertEq(value, 500e18);
     }
 }

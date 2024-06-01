@@ -2,7 +2,29 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 interface IStakeMint {
-    function withdraw() external returns (bool);
+    event Deposited(
+        address depositor,
+        uint256 amount,
+        string assetName,
+        address assetContractAddress
+    );
+    event Withdraw(
+        address owner,
+        uint256 amount,
+        string assetName,
+        address assetContractAddress
+    );
+    event AssetAdded(
+        address owner,
+        address assetContractAddress,
+        string name,
+        address priceFeedAddress,
+        uint256 timeAdded
+    );
+    function withdraw(
+        uint256 _amount,
+        uint256 _assetIndex
+    ) external returns (bool);
 
     function deposit(
         uint256 _value,

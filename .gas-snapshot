@@ -1,0 +1,7 @@
+StakeMintUintTesting:testAssetAdded() (gas: 358513)
+StakeMintUintTesting:testNotOwner() (gas: 62802)
+StakeMintUintTesting:testOutOfIndex() (gas: 11010)
+StakeMintUintTesting:testOwner() (gas: 8539)
+StakeMintUintTesting:testTVL() (gas: 276328)
+StakeMintUintTesting:testTokenOwnerBalance() (gas: 43337)
+StakeMintUintTesting:testTokenPrice() (gas: 49316)
